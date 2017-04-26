@@ -458,7 +458,7 @@ class UpdateDNSApp(Application):
             self.quit(0)
 
 if __name__ == "__main__":
-    interfaces = NetworkInterface.all_interfaces()
-    print(interfaces[4].get_addresses())
-    # app = UpdateDNSApp(name="update-dns", description="Update the DNS names with LINODE")
-    # app.start()
+    # interfaces = NetworkInterface.all_interfaces()
+    # print(interfaces[4].get_addresses())
+    app = UpdateDNSApp(name="update-dns", description="Update the DNS names with LINODE")
+    app.start()
