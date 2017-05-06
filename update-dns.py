@@ -10,11 +10,38 @@ import ssl
 import logging
 import subprocess
 
+if sys.version_info > (3, 0):
+    basestring = str
+
+
+class NullLogger(object):
+    def info(self, *args, **kwargs):
+        pass
+
+    warn = info
+    error = info
+    trace = info
+    debug = info
+
+    instance = None
+
+    @classmethod
+    def singleton(cls):
+        if not cls.instance:
+            cls.instance = cls()
+        return cls.instance
+
 
 class LoggerInjectable(object):
+    @property
+    def logger(self):
+        if hasattr(self, "_logger"):
+            return self._logger
+        return NullLogger.instance()
+
     @classmethod
     def set_logger(cls, logger):
-        cls.logger = logger
+        cls._logger = logger
 
 
 class Application(object):
@@ -146,8 +173,6 @@ class LinodeRequest(LoggerInjectable, object):
         self.logger.debug("Connecting to '%s'. Timeout = %s", self.url, timeout)
         try:
             response = urllib.request.urlopen(self.url, timeout=self.timeout)
-
-
         except ssl.SSLError as e:
             self.logger.error(e.message)
             return {}
@@ -175,20 +200,20 @@ class IpAddress(LoggerInjectable, object):
         parts = address.split(".")
         if len(parts) != 4:
             return False
-        if len(filter(lambda x: x <= 255 and x>= 0, map(lambda x: int(x), parts))) != 4:
+        if len([x for x in parts if 0 <= int(x) < 2**8]) != 4:
             return False
         return True
 
     @staticmethod
     def is_valid_ipv6(address):
         parts = address.split(":")
-        if len(filter(lambda x: x == "", parts)) > 1:
+        if len([x for x in parts if x == ""]) > 1:
             if parts[0] == "" and parts[1] == "" and parts[2] == "1":
                 pass
             else:
                 return False
-        parts = filter(lambda x: x != "", parts)
-        if len(filter(lambda x: x <= 65535 and x >= 0, map(lambda x: int(x, 16), parts))) != len(parts):
+        parts = [x for x in parts if x != ""]
+        if len([x for x in parts if 0 <= int(x, 16) < 2**16]) != len(parts):
             return False
         return True
 
@@ -390,7 +415,7 @@ class UpdateDNSApp(Application):
         self.requestClass = LinodeRequest
         self.requestClass.set_timeout(self.args.timeout)
         self.requestClass.set_api_key(self.api_key)
-        self.inject_logger([LinodeRequest, DomainResource, Domain, LoggerInjectable])
+        self.inject_logger([LinodeRequest, DomainResource, Domain, LoggerInjectable, IpAddress])
 
     def check_requirements(self):
         if self.api_key is None:
@@ -436,12 +461,12 @@ class UpdateDNSApp(Application):
         fqdn = self.args.name
         domain_name = ".".join(fqdn.split(".")[-2:])
         host_name = ".".join(fqdn.split(".")[:-2])
-        domains = filter(lambda x: x.name == domain_name, self.get_domains())
+        domains = [x for x in self.get_domains() if x.name == domain_name]
         if len(domains) != 1:
             self.logger.error("Funny ... There are multiple domains matching your domain name %s", domains)
             return self.quit(1)
         domain = domains[0]
-        resources = filter(lambda x: x.name == host_name and x.dns_type == self.address.dns_type, domain.get_resources())
+        resources = [x for x in domain.get_resources() if x.name == host_name and x.dns_type == self.address.dns_type]
         if len(resources) == 0:
             self.logger.error("There are no resources matching your host name %s", domain.get_resources())
             return self.quit(1)
